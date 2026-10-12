@@ -1,0 +1,79 @@
+# Offline capture and recovery: the behaviour the whole product depends on.
+appId: local.ahlan.hse
+---
+- runFlow: sign-in.yaml
+
+# Let the first sync pull the checklists down while there is still a connection.
+- assertVisible:
+    text: 'My stadiums'
+    timeout: 15000
+- swipe:
+    direction: DOWN
+- waitForAnimationToEnd
+
+# Go offline.
+- setAirplaneMode: true
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible:
+    text: 'Offline.*saving on this device'
+    timeout: 15000
+
+# A new inspection still starts: the checklist came from the local database.
+- tapOn: 'Start inspection'
+- assertVisible:
+    text: 'Choose a checklist|Choose a stadium'
+    timeout: 10000
+- runFlow:
+    when:
+      visible: 'Choose a stadium'
+    commands:
+      - tapOn:
+          index: 0
+          text: '.*Stadium.*'
+- tapOn:
+    index: 0
+    text: '.*Inspection'
+- assertVisible:
+    text: '.*of.*answered'
+    timeout: 10000
+
+# Answer everything Yes, so no photo is required while offline.
+- repeat:
+    while:
+      visible: 'Yes'
+    commands:
+      - tapOn:
+          id: 'Yes'
+          index: 0
+
+- tapOn: 'Submit'
+- assertVisible: 'Submit this inspection?'
+- tapOn: 'Submit'
+
+# Submitted locally and clearly marked as not yet synced.
+- assertVisible:
+    text: 'Saved on device'
+    timeout: 20000
+
+# The work survives the app being killed.
+- stopApp
+- launchApp
+- assertVisible:
+    text: 'Hello.*'
+    timeout: 15000
+- tapOn: 'Inspections'
+- assertVisible:
+    text: 'Saved on device'
+    timeout: 15000
+
+# Reconnect: the queued inspection syncs on its own.
+- setAirplaneMode: false
+- waitForAnimationToEnd:
+    timeout: 10000
+- swipe:
+    direction: DOWN
+- assertVisible:
+    text: 'Synced'
+    timeout: 45000
+- assertNotVisible: 'Sync failed'

@@ -1,0 +1,43 @@
+/**
+ * Stable error codes returned in the `{ code, message, details }` envelope.
+ * The mobile app maps these to localised copy, so codes must not be renamed.
+ */
+export const ERROR_CODES = {
+  VALIDATION_FAILED: 'VALIDATION_FAILED',
+  UNAUTHENTICATED: 'UNAUTHENTICATED',
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  TOKEN_EXPIRED: 'TOKEN_EXPIRED',
+  TOKEN_REVOKED: 'TOKEN_REVOKED',
+  ACCOUNT_PENDING_APPROVAL: 'ACCOUNT_PENDING_APPROVAL',
+  ACCOUNT_SUSPENDED: 'ACCOUNT_SUSPENDED',
+  FORBIDDEN: 'FORBIDDEN',
+  STADIUM_OUT_OF_SCOPE: 'STADIUM_OUT_OF_SCOPE',
+  NOT_FOUND: 'NOT_FOUND',
+  CONFLICT: 'CONFLICT',
+  ALREADY_EXISTS: 'ALREADY_EXISTS',
+  RECORD_LOCKED: 'RECORD_LOCKED',
+  /** The HSE record was soft-deleted by an Admin; restore it first. */
+  RECORD_DELETED: 'RECORD_DELETED',
+  /** A presigned upload was attached before the object landed in storage. */
+  OBJECT_NOT_UPLOADED: 'OBJECT_NOT_UPLOADED',
+  EOD_WINDOW_CLOSED: 'EOD_WINDOW_CLOSED',
+  EOD_ALREADY_SUBMITTED: 'EOD_ALREADY_SUBMITTED',
+  /** The EOD report date is not today or yesterday in the stadium's zone. */
+  EOD_DATE_NOT_ALLOWED: 'EOD_DATE_NOT_ALLOWED',
+  EVIDENCE_REQUIRED: 'EVIDENCE_REQUIRED',
+  CLOSURE_EVIDENCE_REQUIRED: 'CLOSURE_EVIDENCE_REQUIRED',
+  INVALID_STATUS_TRANSITION: 'INVALID_STATUS_TRANSITION',
+  CHECKLIST_VERSION_MISMATCH: 'CHECKLIST_VERSION_MISMATCH',
+  INCOMPLETE_CHECKLIST: 'INCOMPLETE_CHECKLIST',
+  AI_REVIEW_REQUIRED: 'AI_REVIEW_REQUIRED',
+  RATE_LIMITED: 'RATE_LIMITED',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+} as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+export interface ApiErrorBody {
+  code: ErrorCode;
+  message: string;
+  details?: unknown;
+}

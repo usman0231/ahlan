@@ -1,0 +1,70 @@
+# Running a checklist end to end, including the rule that a "No" needs a photo.
+appId: local.ahlan.hse
+---
+- runFlow: sign-in.yaml
+
+- tapOn: 'Start inspection'
+- assertVisible:
+    text: 'Choose a checklist|Choose a stadium'
+    timeout: 10000
+
+# One stadium goes straight to the checklist step; two needs a pick first.
+- runFlow:
+    when:
+      visible: 'Choose a stadium'
+    commands:
+      - tapOn:
+          index: 0
+          text: '.*Stadium.*'
+
+- tapOn:
+    index: 0
+    text: '.*Inspection'
+
+- assertVisible:
+    text: '.*of.*answered'
+    timeout: 10000
+
+# Answer the first item No. Submit must then be blocked until a photo exists.
+- tapOn:
+    id: 'No'
+    index: 0
+- assertVisible: 'A "No" answer requires at least one photo'
+- assertVisible: 'Severity'
+
+- tapOn: 'Submit'
+- assertVisible:
+    text: 'Answer every item before submitting|A "No" answer requires at least one photo'
+
+# Attach the photo the rule demands.
+- tapOn:
+    id: 'Add photo'
+- runFlow:
+    when:
+      visible: 'Allow'
+    commands:
+      - tapOn: 'Allow'
+# The system camera takes over here; these labels differ per device, so the
+# flow pauses for the shutter rather than guessing at them.
+- takeScreenshot: 'camera-open'
+- back
+
+# Answer everything else Yes, then submit.
+- repeat:
+    while:
+      visible: 'Yes'
+    commands:
+      - tapOn:
+          id: 'Yes'
+          index: 0
+
+- tapOn: 'Submit'
+- assertVisible:
+    text: 'Submit this inspection?'
+- tapOn: 'Submit'
+
+- assertVisible:
+    text: 'Inspections'
+    timeout: 20000
+- assertVisible:
+    text: 'Synced|Saved on device'

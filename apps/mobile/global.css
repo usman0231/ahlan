@@ -1,0 +1,197 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Design tokens.
+ *
+ * Both themes define the same variable names, which is what lets a component
+ * write `bg-surface text-fg` once and work in light mode, dark mode and the
+ * high-contrast sunlight theme without a single conditional.
+ *
+ * Values are `R G B` triplets so Tailwind's `/<alpha-value>` syntax works.
+ *
+ * The scales were chosen deliberately, not sampled from a framework default:
+ * - neutrals carry a slight slate cast (pure gray reads as unfinished)
+ * - light mode separates planes with hairline borders + soft shadow,
+ *   dark mode separates them with lightness steps instead of shadow
+ * - the status set was run through the dataviz palette validator; every
+ *   status colour clears 3:1 against its surface in both modes, and status
+ *   is never encoded by colour alone (each use carries a label or figure)
+ */
+
+/*
+ * "Volt Graphite": graphite planes, a hi-vis volt-lime brand and an electric
+ * violet for charts and focus. Lime is a FILL colour - it always carries dark
+ * ink (`on-primary`), never white. As text on a light surface it would vanish,
+ * so `primary` (the brand as ink: links, active icons) is a deep lime in light
+ * mode and the full volt only in dark mode.
+ */
+:root {
+  /* Light: chalk-white planes, graphite ink, volt fills. */
+  --color-bg: 244 245 241;
+  --color-surface: 255 255 255;
+  --color-surface-raised: 255 255 255;
+  --color-surface-sunken: 236 238 232;
+  --color-border: 226 229 222;
+  --color-border-strong: 203 207 198;
+  /* Cards: barely-there edge in light (depth comes from shadow). */
+  --color-card-border: 236 238 231;
+
+  --color-fg: 13 15 18;
+  --color-fg-muted: 88 93 101;
+  --color-fg-subtle: 128 133 141;
+  --color-fg-inverse: 255 255 255;
+
+  --color-primary: 61 107 0;
+  --color-primary-pressed: 47 84 0;
+  --color-primary-strong: 13 15 18;
+  --color-primary-soft: 236 249 200;
+  /* Volt: the solid action fill. Always paired with `on-primary` ink. */
+  --color-primary-fill: 198 244 50;
+  --color-on-primary: 13 15 18;
+
+  /* Electric violet: charts, focus, highlights. Never a status. */
+  --color-accent: 109 74 255;
+  --color-accent-soft: 238 234 255;
+  /* Ink on the graphite hero, identical in every theme. */
+  --color-on-hero: 255 255 255;
+
+  --color-success: 3 135 82;
+  --color-success-soft: 219 245 232;
+  --color-warning: 181 71 8;
+  --color-warning-soft: 254 240 222;
+  --color-danger: 217 45 32;
+  --color-danger-soft: 254 228 226;
+  --color-info: 21 112 205;
+  --color-info-soft: 222 237 252;
+
+  --color-severity-low: 21 94 170;
+  --color-severity-medium: 160 90 0;
+  --color-severity-high: 196 50 10;
+  --color-severity-critical: 180 20 40;
+}
+
+.dark:root,
+:root[data-theme='dark'] {
+  /* Dark: graphite layers - lightness steps plus a hairline, not shadows. */
+  --color-bg: 10 11 13;
+  --color-surface: 20 22 25;
+  --color-surface-raised: 27 30 34;
+  --color-surface-sunken: 15 17 19;
+  --color-border: 37 40 45;
+  --color-border-strong: 52 56 63;
+  --color-card-border: 33 36 41;
+
+  --color-fg: 242 244 240;
+  --color-fg-muted: 161 166 173;
+  --color-fg-subtle: 112 117 125;
+  --color-fg-inverse: 10 11 13;
+
+  --color-primary: 198 244 50;
+  --color-primary-pressed: 176 222 40;
+  --color-primary-strong: 10 11 13;
+  --color-primary-soft: 33 43 12;
+  --color-primary-fill: 198 244 50;
+  --color-on-primary: 10 11 13;
+
+  --color-accent: 155 133 255;
+  --color-accent-soft: 33 27 66;
+  --color-on-hero: 255 255 255;
+
+  --color-success: 61 220 151;
+  --color-success-soft: 10 46 32;
+  --color-warning: 253 176 34;
+  --color-warning-soft: 58 38 6;
+  --color-danger: 255 107 99;
+  --color-danger-soft: 64 20 18;
+  --color-info: 83 177 253;
+  --color-info-soft: 12 36 60;
+
+  --color-severity-low: 125 200 252;
+  --color-severity-medium: 253 200 70;
+  --color-severity-high: 253 145 80;
+  --color-severity-critical: 255 112 112;
+}
+
+/**
+ * High contrast, for inspecting in direct sunlight. Pure black on white with
+ * heavier borders; the inspector toggles it in Settings. Volt stays as the
+ * action fill: black on lime is one of the highest-contrast pairs there is.
+ */
+:root[data-theme='contrast'] {
+  --color-bg: 255 255 255;
+  --color-surface: 255 255 255;
+  --color-surface-raised: 255 255 255;
+  --color-surface-sunken: 240 240 240;
+  --color-border: 20 20 20;
+  --color-border-strong: 0 0 0;
+  --color-card-border: 20 20 20;
+
+  --color-fg: 0 0 0;
+  --color-fg-muted: 38 38 38;
+  --color-fg-subtle: 70 70 70;
+  --color-fg-inverse: 255 255 255;
+
+  --color-primary: 36 64 0;
+  --color-primary-pressed: 24 44 0;
+  --color-primary-strong: 0 0 0;
+  --color-primary-soft: 232 250 190;
+  --color-primary-fill: 198 244 50;
+  --color-on-primary: 0 0 0;
+
+  --color-accent: 70 30 200;
+  --color-accent-soft: 232 226 255;
+  --color-on-hero: 255 255 255;
+
+  --color-success: 0 100 40;
+  --color-success-soft: 212 240 222;
+  --color-warning: 120 76 0;
+  --color-warning-soft: 253 240 200;
+  --color-danger: 160 0 40;
+  --color-danger-soft: 253 224 230;
+  --color-info: 0 80 120;
+  --color-info-soft: 214 236 248;
+
+  --color-severity-low: 0 70 110;
+  --color-severity-medium: 110 70 0;
+  --color-severity-high: 140 40 0;
+  --color-severity-critical: 150 0 30;
+}
+
+/**
+ * Web only: Chrome paints autofilled inputs with its own opaque white, which
+ * torches the dark theme. The long transition is the standard counter - the
+ * browser's fill colour never gets a frame to show. Native ignores this rule.
+ */
+/* Web only: scrollbars in the theme's own ink instead of the browser's white
+   gutter, which glares in dark mode. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--color-border-strong)) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-border-strong));
+  border-radius: 8px;
+}
+
+/* Web only: fields draw their own focus border; drop the browser's ring. */
+input:focus,
+textarea:focus {
+  outline: none;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--color-fg));
+  transition: background-color 999999s ease-in-out 0s;
+  caret-color: rgb(var(--color-fg));
+}

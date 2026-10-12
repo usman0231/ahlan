@@ -1,0 +1,15 @@
+# Shared sub-flow: sign in as the seeded inspector.
+appId: local.ahlan.hse
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: 'Email'
+- inputText: 'inspector1@ahlan.local'
+- tapOn:
+    id: 'Password'
+- inputText: 'Stadium2026!'
+- tapOn: 'Sign in'
+- assertVisible:
+    text: 'Hello.*'
+    timeout: 15000

@@ -1,0 +1,1005 @@
+// Ahlan HSE - PostgreSQL 16 schema.
+//
+// Conventions enforced here:
+//   * ids are UUID v7, minted by the creator (device for offline records, service
+//     otherwise) - there is deliberately no database default
+//   * every instant is `timestamptz`; calendar days that belong to a stadium are
+//     `date` and are resolved in the stadium's time zone
+//   * man-hours and percentages are `decimal`, never float
+//   * users / stadiums / checklists / disciplines / tournaments soft delete;
+//     HSE records (inspections, observations, findings, EOD) are never
+//     hard-deleted - an admin may soft-delete and restore them, audited
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// HSE Administrator, Supervisor (reviewer of assigned stadiums) or Venue Inspector.
+enum Role {
+  ADMIN
+  SUPERVISOR
+  INSPECTOR
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ResponseValue {
+  YES
+  NO
+  NA
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RiskRating {
+  LOW
+  MODERATE
+  HIGH
+  EXTREME
+}
+
+enum ObservationType {
+  UNSAFE_ACT
+  UNSAFE_CONDITION
+  POSITIVE
+  NEAR_MISS
+}
+
+/// OVERDUE is intentionally absent: it is derived from the due date.
+enum FindingStatus {
+  OPEN
+  ACTION_ASSIGNED
+  IN_PROGRESS
+  PENDING_VERIFICATION
+  CLOSED
+}
+
+enum FindingSource {
+  INSPECTION
+  OBSERVATION
+  MANUAL
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+}
+
+/// READINESS = the daily stadium safety readiness sheets; DISCIPLINE = an HSE discipline's checklist.
+enum ChecklistCategory {
+  READINESS
+  DISCIPLINE
+  GENERAL
+}
+
+enum EvidenceKind {
+  PHOTO
+  DOCUMENT
+}
+
+enum EvidenceContext {
+  INSPECTION_RESPONSE
+  OBSERVATION
+  FINDING
+  CORRECTIVE_ACTION_PROGRESS
+  CORRECTIVE_ACTION_CLOSURE
+  EOD
+}
+
+enum EvidenceUploadStatus {
+  PENDING
+  UPLOADED
+  FAILED
+}
+
+enum ReportType {
+  WEEKLY
+  CUMULATIVE
+  END_OF_TOURNAMENT
+}
+
+enum ReportScope {
+  CONSOLIDATED
+  STADIUM
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AiInsightKind {
+  TREND_SUMMARY
+  RISK_FORECAST
+  RECOMMENDATION
+  ANOMALY
+}
+
+enum AiReviewStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum NotificationKind {
+  ACCESS_REQUEST_SUBMITTED
+  ACCESS_REQUEST_APPROVED
+  ACCESS_REQUEST_REJECTED
+  FINDING_ASSIGNED
+  ACTION_DUE_SOON
+  ACTION_OVERDUE
+  EOD_WINDOW_OPEN
+  EOD_MISSING
+  REPORT_READY
+  AI_INSIGHT_READY
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  SUBMIT
+  ADMIN_CORRECTION
+  RESTORE
+  STATUS_CHANGE
+  APPROVE
+  REJECT
+  LOGIN
+  LOGOUT
+}
+
+enum Locale {
+  en
+  ar
+}
+
+// -------------------------------------------------------------------------
+// Identity
+// -------------------------------------------------------------------------
+
+model User {
+  id           String     @id @db.Uuid
+  email        String     @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         Role
+  status       UserStatus @default(PENDING)
+  organisation String?
+  jobTitle     String?
+  avatarKey    String?
+  locale       Locale     @default(en)
+  lastLoginAt  DateTime?  @db.Timestamptz(3)
+  deletedAt    DateTime?  @db.Timestamptz(3)
+  createdAt    DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @db.Timestamptz(3)
+
+  stadiums            StadiumAssignment[]
+  sessions            Session[]
+  passwordResets      PasswordResetToken[]
+  pushTokens          PushToken[]
+  inspections         Inspection[]
+  observations        Observation[]
+  eodReports          EodReport[]
+  findingsRaised      Finding[]            @relation("FindingRaisedBy")
+  actionsAssigned     CorrectiveAction[]   @relation("ActionAssignee")
+  actionsVerified     CorrectiveAction[]   @relation("ActionVerifier")
+  evidenceUploaded    Evidence[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  accessDecisions     AccessRequest[]      @relation("AccessRequestDecidedBy")
+  checklistVersions   ChecklistVersion[]
+  eodWindowsCreated   EodWindow[]
+  eodWindowDefaults   EodWindowDefault[]
+  reportsRequested    Report[]
+  aiInsightsReviewed  AiInsight[]
+  stadiumsAssignedOut StadiumAssignment[]  @relation("AssignedBy")
+
+  @@index([role, status])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+/// One row per logged-in device, so a single device can be revoked.
+model Session {
+  id               String    @id @db.Uuid
+  userId           String    @db.Uuid
+  refreshTokenHash String
+  deviceId         String?
+  userAgent        String?
+  ip               String?
+  expiresAt        DateTime  @db.Timestamptz(3)
+  revokedAt        DateTime? @db.Timestamptz(3)
+  lastUsedAt       DateTime? @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String    @id @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model PushToken {
+  id         String   @id @db.Uuid
+  userId     String   @db.Uuid
+  token      String   @unique
+  platform   String
+  deviceId   String
+  appVersion String?
+  lastSeenAt DateTime @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
+}
+
+/// Self-registration. The password is captured here and moved onto the User row
+/// only once an admin approves, so a rejected applicant never gets credentials.
+model AccessRequest {
+  id                  String              @id @db.Uuid
+  email               String
+  passwordHash        String
+  fullName            String
+  phone               String?
+  organisation        String?
+  jobTitle            String?
+  note                String?
+  requestedStadiumIds String[]            @db.Uuid
+  status              AccessRequestStatus @default(PENDING)
+  decidedById         String?             @db.Uuid
+  decidedAt           DateTime?           @db.Timestamptz(3)
+  decisionNote        String?
+  createdAt           DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime            @updatedAt @db.Timestamptz(3)
+
+  decidedBy User? @relation("AccessRequestDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([email])
+  @@map("access_requests")
+}
+
+// -------------------------------------------------------------------------
+// Catalog
+// -------------------------------------------------------------------------
+
+model Tournament {
+  id        String    @id @db.Uuid
+  name      String
+  nameAr    String?
+  startDate DateTime  @db.Date
+  endDate   DateTime  @db.Date
+  isActive  Boolean   @default(false)
+  /// Soft delete; the active tournament can never be deleted.
+  deletedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+
+  inspections  Inspection[]
+  observations Observation[]
+  findings     Finding[]
+  eodReports   EodReport[]
+  reports      Report[]
+  aiInsights   AiInsight[]
+
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("tournaments")
+}
+
+model Stadium {
+  id             String    @id @db.Uuid
+  name           String
+  nameAr         String?
+  code           String    @unique
+  city           String?
+  /// IANA zone; every stadium-local date and EOD window is resolved through it.
+  timezone       String    @default("Asia/Riyadh")
+  capacity       Int?
+  latitude       Float?
+  longitude      Float?
+  isActive       Boolean   @default(true)
+  /// Uploaded photo (evidence bucket, `stadiums/<id>/...`). Null = the app's bundled photo by code.
+  imageKey       String?
+  imageUpdatedAt DateTime? @db.Timestamptz(3)
+  deletedAt      DateTime? @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+
+  assignments       StadiumAssignment[]
+  checklists        ChecklistStadium[]
+  inspections       Inspection[]
+  observations      Observation[]
+  findings          Finding[]
+  eodReports        EodReport[]
+  eodWindows        EodWindow[]
+  eodWindowDefaults EodWindowDefault[]
+  evidence          Evidence[]
+  reports           Report[]
+  aiInsights        AiInsight[]
+
+  @@index([isActive, deletedAt])
+  @@map("stadiums")
+}
+
+/// The inspector's scope. Every inspector route filters on this table.
+model StadiumAssignment {
+  userId       String   @db.Uuid
+  stadiumId    String   @db.Uuid
+  assignedById String?  @db.Uuid
+  assignedAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stadium    Stadium @relation(fields: [stadiumId], references: [id], onDelete: Cascade)
+  assignedBy User?   @relation("AssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@id([userId, stadiumId])
+  @@index([stadiumId])
+  @@map("stadium_assignments")
+}
+
+/// Seeded rows, not a UI enum, so the HSE team can add one without a release.
+model Discipline {
+  id            String    @id @db.Uuid
+  slug          String    @unique
+  name          String
+  nameAr        String?
+  /// One-line scope shown on the HSE Observation discipline card.
+  description   String?
+  descriptionAr String?
+  icon          String?
+  colorToken    String?
+  sortOrder     Int       @default(0)
+  isActive      Boolean   @default(true)
+  /// Soft delete: historical observations keep resolving the discipline.
+  deletedAt     DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+
+  checklists   Checklist[]
+  observations Observation[]
+  findings     Finding[]
+
+  @@index([isActive, sortOrder])
+  @@index([deletedAt])
+  @@map("disciplines")
+}
+
+// -------------------------------------------------------------------------
+// Checklists (versioned)
+// -------------------------------------------------------------------------
+
+model Checklist {
+  id               String            @id @db.Uuid
+  title            String
+  titleAr          String?
+  description      String?
+  category         ChecklistCategory @default(GENERAL)
+  disciplineId     String?           @db.Uuid
+  isActive         Boolean           @default(true)
+  /// Points at the published version inspectors are served.
+  currentVersionId String?           @unique @db.Uuid
+  deletedAt        DateTime?         @db.Timestamptz(3)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(3)
+
+  discipline     Discipline?        @relation(fields: [disciplineId], references: [id], onDelete: SetNull)
+  currentVersion ChecklistVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  versions       ChecklistVersion[] @relation("ChecklistVersions")
+  stadiums       ChecklistStadium[]
+  inspections    Inspection[]
+
+  @@index([isActive, deletedAt])
+  @@index([disciplineId])
+  @@index([category])
+  @@map("checklists")
+}
+
+/// Empty set of rows for a checklist means "applies to every stadium".
+model ChecklistStadium {
+  checklistId String @db.Uuid
+  stadiumId   String @db.Uuid
+
+  checklist Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  stadium   Stadium   @relation(fields: [stadiumId], references: [id], onDelete: Cascade)
+
+  @@id([checklistId, stadiumId])
+  @@index([stadiumId])
+  @@map("checklist_stadiums")
+}
+
+/// Editing questions never mutates a version; it creates the next one.
+model ChecklistVersion {
+  id          String    @id @db.Uuid
+  checklistId String    @db.Uuid
+  version     Int
+  isPublished Boolean   @default(false)
+  publishedAt DateTime? @db.Timestamptz(3)
+  createdById String?   @db.Uuid
+  changeNote  String?
+  itemCount   Int       @default(0)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+
+  checklist   Checklist          @relation("ChecklistVersions", fields: [checklistId], references: [id], onDelete: Cascade)
+  createdBy   User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  sections    ChecklistSection[]
+  inspections Inspection[]
+  currentOf   Checklist?         @relation("CurrentVersion")
+
+  @@unique([checklistId, version])
+  @@index([checklistId, isPublished])
+  @@map("checklist_versions")
+}
+
+model ChecklistSection {
+  id        String  @id @db.Uuid
+  versionId String  @db.Uuid
+  title     String
+  titleAr   String?
+  sortOrder Int     @default(0)
+
+  version ChecklistVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  items   ChecklistItem[]
+
+  @@index([versionId, sortOrder])
+  @@map("checklist_sections")
+}
+
+model ChecklistItem {
+  id              String   @id @db.Uuid
+  sectionId       String   @db.Uuid
+  /// Human-facing code printed in reports, e.g. "WAH-04".
+  code            String
+  question        String
+  questionAr      String?
+  guidance        String?
+  defaultSeverity Severity @default(MEDIUM)
+  allowNa         Boolean  @default(true)
+  sortOrder       Int      @default(0)
+
+  section   ChecklistSection     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  responses InspectionResponse[]
+
+  @@index([sectionId, sortOrder])
+  @@map("checklist_items")
+}
+
+// -------------------------------------------------------------------------
+// Field records
+// -------------------------------------------------------------------------
+
+model Inspection {
+  id                 String           @id @db.Uuid
+  stadiumId          String           @db.Uuid
+  tournamentId       String?          @db.Uuid
+  checklistId        String           @db.Uuid
+  /// Frozen at submit so the answers always match the wording they were given.
+  checklistVersionId String           @db.Uuid
+  inspectorId        String           @db.Uuid
+  status             SubmissionStatus @default(DRAFT)
+  /// Calendar day in the stadium's zone that this inspection counts towards.
+  localDate          DateTime         @db.Date
+  startedAt          DateTime         @db.Timestamptz(3)
+  clientCreatedAt    DateTime         @db.Timestamptz(3)
+  submittedAt        DateTime?        @db.Timestamptz(3)
+  /// Authoritative server clock at submit.
+  serverReceivedAt   DateTime?        @db.Timestamptz(3)
+  latitude           Float?
+  longitude          Float?
+  gpsAccuracyM       Float?
+  deviceId           String?
+  appVersion         String?
+  yesCount           Int              @default(0)
+  noCount            Int              @default(0)
+  naCount            Int              @default(0)
+  /// YES / (YES + NO) x 100, recomputed server-side. Null when all answers are NA.
+  compliancePercent  Decimal?         @db.Decimal(5, 2)
+  notes              String?
+  /// Free-text "Location" from the readiness sheet header.
+  locationLabel      String?
+  /// "Other observations": recorded, not scored.
+  otherObservations  String?
+  isLocked           Boolean          @default(false)
+  /// Soft delete (admin only, audited). Every read path excludes the row; see src/prisma/soft-delete.ts.
+  deletedAt          DateTime?        @db.Timestamptz(3)
+  deletedById        String?          @db.Uuid
+  deleteReason       String?
+  createdAt          DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @db.Timestamptz(3)
+
+  stadium          Stadium              @relation(fields: [stadiumId], references: [id], onDelete: Restrict)
+  tournament       Tournament?          @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  checklist        Checklist            @relation(fields: [checklistId], references: [id], onDelete: Restrict)
+  checklistVersion ChecklistVersion     @relation(fields: [checklistVersionId], references: [id], onDelete: Restrict)
+  inspector        User                 @relation(fields: [inspectorId], references: [id], onDelete: Restrict)
+  responses        InspectionResponse[]
+  findings         Finding[]
+
+  @@index([stadiumId, localDate])
+  @@index([inspectorId, localDate])
+  @@index([status, updatedAt])
+  @@index([tournamentId, localDate])
+  @@index([deletedAt])
+  @@map("inspections")
+}
+
+model InspectionResponse {
+  id             String        @id @db.Uuid
+  inspectionId   String        @db.Uuid
+  itemId         String        @db.Uuid
+  /// Denormalised so a report never has to walk back to the checklist version.
+  itemCode       String
+  value          ResponseValue
+  comment        String?
+  /// "Concern / observation" column of the readiness sheet.
+  concern        String?
+  /// "Recommendation / action required" column of the readiness sheet.
+  recommendation String?
+  /// Overrides the item default on the finding a NO raises.
+  severity       Severity?
+  answeredAt     DateTime      @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+
+  inspection Inspection    @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  item       ChecklistItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  finding    Finding?
+
+  @@unique([inspectionId, itemId])
+  @@index([itemCode])
+  @@map("inspection_responses")
+}
+
+model Observation {
+  id               String           @id @db.Uuid
+  stadiumId        String           @db.Uuid
+  tournamentId     String?          @db.Uuid
+  disciplineId     String           @db.Uuid
+  inspectorId      String           @db.Uuid
+  type             ObservationType
+  severity         Severity         @default(MEDIUM)
+  riskRating       RiskRating       @default(MODERATE)
+  title            String
+  description      String
+  locationLabel    String?
+  responsibleParty String?
+  immediateAction  String?
+  status           SubmissionStatus @default(DRAFT)
+  localDate        DateTime         @db.Date
+  observedAt       DateTime         @db.Timestamptz(3)
+  clientCreatedAt  DateTime         @db.Timestamptz(3)
+  submittedAt      DateTime?        @db.Timestamptz(3)
+  serverReceivedAt DateTime?        @db.Timestamptz(3)
+  latitude         Float?
+  longitude        Float?
+  gpsAccuracyM     Float?
+  deviceId         String?
+  appVersion       String?
+  isLocked         Boolean          @default(false)
+  /// Soft delete (admin only, audited). Every read path excludes the row; see src/prisma/soft-delete.ts.
+  deletedAt        DateTime?        @db.Timestamptz(3)
+  deletedById      String?          @db.Uuid
+  deleteReason     String?
+  createdAt        DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(3)
+
+  stadium    Stadium     @relation(fields: [stadiumId], references: [id], onDelete: Restrict)
+  tournament Tournament? @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  discipline Discipline  @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
+  inspector  User        @relation(fields: [inspectorId], references: [id], onDelete: Restrict)
+  finding    Finding?
+
+  @@index([stadiumId, localDate])
+  @@index([disciplineId, localDate])
+  @@index([inspectorId, localDate])
+  @@index([status, updatedAt])
+  @@index([deletedAt])
+  @@map("observations")
+}
+
+// -------------------------------------------------------------------------
+// Findings and corrective actions
+// -------------------------------------------------------------------------
+
+model Finding {
+  id                   String        @id @db.Uuid
+  /// Printed reference, e.g. "F-LSL-000123".
+  reference            String        @unique
+  stadiumId            String        @db.Uuid
+  tournamentId         String?       @db.Uuid
+  disciplineId         String?       @db.Uuid
+  source               FindingSource
+  inspectionId         String?       @db.Uuid
+  /// One finding per failing answer; the unique constraint makes submit idempotent.
+  inspectionResponseId String?       @unique @db.Uuid
+  observationId        String?       @unique @db.Uuid
+  raisedById           String        @db.Uuid
+  title                String
+  description          String
+  severity             Severity
+  status               FindingStatus @default(OPEN)
+  localDate            DateTime      @db.Date
+  raisedAt             DateTime      @db.Timestamptz(3)
+  closedAt             DateTime?     @db.Timestamptz(3)
+  /// Soft delete (admin only, audited). Every read path excludes the row; see src/prisma/soft-delete.ts.
+  deletedAt            DateTime?     @db.Timestamptz(3)
+  deletedById          String?       @db.Uuid
+  deleteReason         String?
+  createdAt            DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(3)
+
+  stadium            Stadium             @relation(fields: [stadiumId], references: [id], onDelete: Restrict)
+  tournament         Tournament?         @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  discipline         Discipline?         @relation(fields: [disciplineId], references: [id], onDelete: SetNull)
+  inspection         Inspection?         @relation(fields: [inspectionId], references: [id], onDelete: SetNull)
+  inspectionResponse InspectionResponse? @relation(fields: [inspectionResponseId], references: [id], onDelete: SetNull)
+  observation        Observation?        @relation(fields: [observationId], references: [id], onDelete: SetNull)
+  raisedBy           User                @relation("FindingRaisedBy", fields: [raisedById], references: [id], onDelete: Restrict)
+  actions            CorrectiveAction[]
+
+  @@index([stadiumId, status])
+  @@index([status, severity])
+  @@index([localDate])
+  @@index([tournamentId, localDate])
+  @@index([deletedAt])
+  @@map("findings")
+}
+
+/// Atomic per-stadium counter behind printed finding references.
+/// `update: { value: { increment: 1 } }` is a single UPDATE, so two inspectors
+/// submitting at the same moment cannot be handed the same reference.
+model ReferenceCounter {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("reference_counters")
+}
+
+model CorrectiveAction {
+  id               String        @id @db.Uuid
+  findingId        String        @db.Uuid
+  assigneeId       String?       @db.Uuid
+  /// Contractor or other party when there is no app user to assign to.
+  responsibleParty String?
+  action           String
+  dueDate          DateTime?     @db.Date
+  status           FindingStatus @default(ACTION_ASSIGNED)
+  startedAt        DateTime?     @db.Timestamptz(3)
+  completedAt      DateTime?     @db.Timestamptz(3)
+  verifiedAt       DateTime?     @db.Timestamptz(3)
+  verifiedById     String?       @db.Uuid
+  closureNote      String?
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+
+  finding    Finding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  assignee   User?   @relation("ActionAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  verifiedBy User?   @relation("ActionVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@index([findingId])
+  @@index([assigneeId, status])
+  @@index([status, dueDate])
+  @@map("corrective_actions")
+}
+
+// -------------------------------------------------------------------------
+// Evidence
+// -------------------------------------------------------------------------
+
+/// Metadata only. Bytes live in object storage and are written by the device
+/// through a presigned PUT, so they never pass through the API process.
+model Evidence {
+  id           String               @id @db.Uuid
+  kind         EvidenceKind         @default(PHOTO)
+  context      EvidenceContext
+  /// Polymorphic parent id (response, observation, finding, action or EOD).
+  /// Deliberately not a foreign key: one upload flow serves six parents.
+  contextId    String?              @db.Uuid
+  objectKey    String               @unique
+  contentType  String
+  sizeBytes    Int                  @default(0)
+  width        Int?
+  height       Int?
+  caption      String?
+  checksum     String?
+  capturedAt   DateTime?            @db.Timestamptz(3)
+  latitude     Float?
+  longitude    Float?
+  gpsAccuracyM Float?
+  uploadStatus EvidenceUploadStatus @default(PENDING)
+  uploadedById String               @db.Uuid
+  stadiumId    String?              @db.Uuid
+  createdAt    DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime             @updatedAt @db.Timestamptz(3)
+
+  uploadedBy User     @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  stadium    Stadium? @relation(fields: [stadiumId], references: [id], onDelete: SetNull)
+
+  @@index([context, contextId])
+  @@index([uploadStatus, createdAt])
+  @@index([stadiumId])
+  @@map("evidence")
+}
+
+// -------------------------------------------------------------------------
+// End of day
+// -------------------------------------------------------------------------
+
+/// Admin-controlled submission window. `stadiumId` null means it applies to every
+/// stadium on that date, with the times read in each stadium's own zone. The
+/// "one global window per date" rule is enforced in the service, because Postgres
+/// treats NULLs as distinct in a unique index.
+model EodWindow {
+  id          String   @id @db.Uuid
+  stadiumId   String?  @db.Uuid
+  date        DateTime @db.Date
+  /// Stadium-local HH:mm. endTime <= startTime means the window crosses midnight.
+  startTime   String
+  endTime     String
+  enabled     Boolean  @default(true)
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  stadium   Stadium? @relation(fields: [stadiumId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([stadiumId, date])
+  @@index([date, enabled])
+  @@map("eod_windows")
+}
+
+/// Recurring daily EOD window. stadiumId null = the global default. Per-date
+/// EodWindow rows override it (stadium row > global row > stadium default >
+/// global default). One row per stadium and one global row, enforced in the
+/// service for the global case (NULLs are distinct in a unique index).
+model EodWindowDefault {
+  id          String   @id @db.Uuid
+  stadiumId   String?  @unique @db.Uuid
+  /// Stadium-local HH:mm. endTime <= startTime means the window crosses midnight.
+  startTime   String
+  endTime     String
+  enabled     Boolean  @default(true)
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  stadium   Stadium? @relation(fields: [stadiumId], references: [id], onDelete: Cascade)
+  updatedBy User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([updatedAt])
+  @@map("eod_window_defaults")
+}
+
+/// One per inspector, per stadium, per stadium-local day.
+model EodReport {
+  id                      String           @id @db.Uuid
+  stadiumId               String           @db.Uuid
+  tournamentId            String?          @db.Uuid
+  inspectorId             String           @db.Uuid
+  date                    DateTime         @db.Date
+  status                  SubmissionStatus @default(DRAFT)
+  totalHeadcount          Int              @default(0)
+  totalManHours           Decimal          @default(0) @db.Decimal(12, 2)
+  inspectionsCompleted    Int              @default(0)
+  observationsRaised      Int              @default(0)
+  findingsRaised          Int              @default(0)
+  findingsClosed          Int              @default(0)
+  /// Server-set equal to workRelatedMedical; KPIs, reports and AI read it.
+  recordableIncidents     Int              @default(0)
+  nearMisses              Int              @default(0)
+  totalSpectators         Int?
+  workRelatedMedical      Int              @default(0)
+  nonWorkRelatedMedical   Int              @default(0)
+  firstAidCases           Int              @default(0)
+  fireIncidents           Int              @default(0)
+  otherIncidents          Int              @default(0)
+  hseObservationsReported Int              @default(0)
+  /// Highlights & key activities.
+  summary                 String?
+  /// Issues / risks.
+  concerns                String?
+  actionsMitigation       String?
+  /// Next 24 hours.
+  plannedTomorrow         String?
+  additionalRemarks       String?
+  weather                 String?
+  clientCreatedAt         DateTime         @db.Timestamptz(3)
+  submittedAt             DateTime?        @db.Timestamptz(3)
+  serverReceivedAt        DateTime?        @db.Timestamptz(3)
+  latitude                Float?
+  longitude               Float?
+  gpsAccuracyM            Float?
+  deviceId                String?
+  appVersion              String?
+  isLocked                Boolean          @default(false)
+  /// Soft delete (admin only, audited). Every read path excludes the row; see src/prisma/soft-delete.ts.
+  deletedAt               DateTime?        @db.Timestamptz(3)
+  deletedById             String?          @db.Uuid
+  deleteReason            String?
+  /// "" while live; the row's own id once soft-deleted. Part of the one-EOD-per-day
+  /// unique key, so a deleted report frees the slot for a new submission.
+  deletedSlot             String           @default("")
+  createdAt               DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime         @updatedAt @db.Timestamptz(3)
+
+  stadium    Stadium             @relation(fields: [stadiumId], references: [id], onDelete: Restrict)
+  tournament Tournament?         @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  inspector  User                @relation(fields: [inspectorId], references: [id], onDelete: Restrict)
+  workforce  EodWorkforceEntry[]
+
+  @@unique([stadiumId, inspectorId, date, deletedSlot])
+  @@index([deletedAt])
+  @@index([stadiumId, date])
+  @@index([inspectorId, date])
+  @@map("eod_reports")
+}
+
+model EodWorkforceEntry {
+  id          String  @id @db.Uuid
+  eodReportId String  @db.Uuid
+  /// Workforce category, e.g. "Stewards" (was the contractor name).
+  category    String
+  personnel   Int     @default(0)
+  /// Hours per person, 0-24.
+  hours       Decimal @default(0) @db.Decimal(5, 2)
+  /// personnel x hours, recomputed by the API.
+  manHours    Decimal @default(0) @db.Decimal(12, 2)
+  sortOrder   Int     @default(0)
+
+  eodReport EodReport @relation(fields: [eodReportId], references: [id], onDelete: Cascade)
+
+  @@index([eodReportId, sortOrder])
+  @@map("eod_workforce_entries")
+}
+
+// -------------------------------------------------------------------------
+// Reports, AI, notifications, audit
+// -------------------------------------------------------------------------
+
+/// A row is created when a report is requested; the BullMQ worker fills the rest.
+model Report {
+  id                String      @id @db.Uuid
+  type              ReportType
+  scope             ReportScope @default(CONSOLIDATED)
+  stadiumId         String?     @db.Uuid
+  tournamentId      String      @db.Uuid
+  periodStart       DateTime    @db.Date
+  periodEnd         DateTime    @db.Date
+  status            JobStatus   @default(QUEUED)
+  objectKey         String?
+  fileName          String?
+  sizeBytes         Int?
+  pageCount         Int?
+  includeAiInsights Boolean     @default(false)
+  locale            Locale      @default(en)
+  note              String?
+  requestedById     String      @db.Uuid
+  error             String?
+  startedAt         DateTime?   @db.Timestamptz(3)
+  completedAt       DateTime?   @db.Timestamptz(3)
+  createdAt         DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime    @updatedAt @db.Timestamptz(3)
+
+  stadium     Stadium?   @relation(fields: [stadiumId], references: [id], onDelete: SetNull)
+  tournament  Tournament @relation(fields: [tournamentId], references: [id], onDelete: Restrict)
+  requestedBy User       @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([tournamentId, type])
+  @@map("reports")
+}
+
+/// Produced in a worker from aggregated figures only, and never published to an
+/// official report until an admin has reviewed it.
+model AiInsight {
+  id            String         @id @db.Uuid
+  kind          AiInsightKind
+  tournamentId  String         @db.Uuid
+  stadiumId     String?        @db.Uuid
+  periodStart   DateTime       @db.Date
+  periodEnd     DateTime       @db.Date
+  title         String
+  body          String
+  bullets       String[]
+  severity      Severity?
+  confidence    Decimal?       @db.Decimal(4, 3)
+  /// The aggregates handed to the model, kept so a figure can be traced back.
+  inputSnapshot Json?
+  model         String
+  promptVersion String
+  reviewStatus  AiReviewStatus @default(PENDING_REVIEW)
+  reviewedById  String?        @db.Uuid
+  reviewedAt    DateTime?      @db.Timestamptz(3)
+  reviewNote    String?
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @db.Timestamptz(3)
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  stadium    Stadium?   @relation(fields: [stadiumId], references: [id], onDelete: SetNull)
+  reviewedBy User?      @relation(fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([tournamentId, reviewStatus])
+  @@index([stadiumId, periodEnd])
+  @@map("ai_insights")
+}
+
+model Notification {
+  id        String           @id @db.Uuid
+  userId    String           @db.Uuid
+  kind      NotificationKind
+  title     String
+  body      String
+  route     String?
+  data      Json?
+  readAt    DateTime?        @db.Timestamptz(3)
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+/// Append-only. Admin corrections to locked records land here with a reason.
+model AuditLog {
+  id        String      @id @db.Uuid
+  actorId   String?     @db.Uuid
+  actorRole String?
+  action    AuditAction
+  entity    String
+  entityId  String?
+  stadiumId String?     @db.Uuid
+  reason    String?
+  /// { field: { from, to } } for the fields that actually changed.
+  diff      Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime    @default(now()) @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

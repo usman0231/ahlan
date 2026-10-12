@@ -1,0 +1,46 @@
+AHLAN HSE - TESTING SETUP (Windows)
+===================================
+
+1) YEH 3 CHEEZEIN INSTALL KAREIN (eik dafa)
+   - Node.js 22 LTS ........ https://nodejs.org
+   - Docker Desktop ........ https://www.docker.com/products/docker-desktop
+                             (install ke baad Docker Desktop khol kar chalta chhor dein)
+   - pnpm .................. Terminal (Command Prompt) mein:  npm install -g pnpm@9.15.9
+
+
+2) PEHLI DAFA SETUP (project folder mein terminal khol kar, eik eik line chalayein)
+
+   pnpm install
+   docker compose up -d
+   copy apps\api\.env.example apps\api\.env
+   copy apps\mobile\.env.example apps\mobile\.env
+   pnpm --filter @ahlan/shared build
+   pnpm --filter api prisma:generate
+   pnpm --filter api prisma:deploy
+   pnpm --filter api db:seed
+   pnpm --filter api browsers:install
+
+   Phir "apps\mobile\.env" ko Notepad mein kholein aur yeh line aise kar dein:
+   EXPO_PUBLIC_API_URL=http://localhost:3000
+
+
+3) APP CHALAYEIN (har dafa)
+   Docker Desktop on ho. Phir DO terminal kholein:
+
+   Terminal 1:   pnpm --filter api dev
+   Terminal 2:   pnpm --filter mobile web
+
+   Browser mein kholein:  http://localhost:8081
+   (Pehli dafa load hone mein 1-2 minute lag sakte hain.)
+
+
+4) LOGIN  (password sab ka:  Stadium2026! )
+   admin@ahlan.local          Admin
+   supervisor@ahlan.local     Supervisor
+   inspector1@ahlan.local     Inspector  (inspector1 se inspector8 tak, har eik ka alag stadium)
+
+
+AGAR MASLA HO
+   - Page khaali rahe: 2 minute ruk kar refresh karein.
+   - Login na ho: Docker Desktop aur Terminal 1 chal rahe hain? Check karein.
+   - Ajeeb purana data: app se Sign out karein.

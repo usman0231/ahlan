@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    // Keep the incremental build log inside the output directory.
+    //
+    // `nest-cli.json` sets `deleteOutDir`, so every start wipes `dist`. With
+    // the log sitting next to this file it survived that wipe, tsc concluded
+    // nothing had changed, emitted nothing, and the process died on
+    // "Cannot find module dist/main" - after reporting "Found 0 errors".
+    // Inside `dist` the two are deleted together and can never disagree.
+    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test", "prisma", "**/*.spec.ts"]
+}

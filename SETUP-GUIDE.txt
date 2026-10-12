@@ -1,0 +1,225 @@
+===============================================================================
+  AHLAN HSE - NAYE COMPUTER PAR SETUP KA MUKAMMAL TAREEQA
+===============================================================================
+
+Yeh guide Windows ke liye likhi gayi hai (Mac/Linux par bhi same steps hain,
+sirf "copy" ki jagah "cp" likhein). Har command project ke main folder
+(jahan package.json aur pnpm-workspace.yaml hain) mein chalani hai, jab tak
+alag folder na bataya ho.
+
+Project mein 3 hissay hain:
+  apps/api         -> Backend (NestJS + Prisma + PostgreSQL)       port 3000
+  apps/mobile      -> App (Expo / React Native), browser mein      port 8081
+  packages/shared  -> Dono ka shared code (pehle build karna zaroori hai)
+
+Background services jo chahiye:
+  PostgreSQL  (database)                    port 5432 (ya 5433)
+  Redis       (reports / reminders queue)   port 6379
+  S3 storage  (photos aur report PDFs)      port 9000
+  Mailpit     (password reset emails)       port 1025, inbox 8025 (optional)
+
+
+-------------------------------------------------------------------------------
+STEP 0 - YEH SOFTWARE PEHLE INSTALL KAREIN
+-------------------------------------------------------------------------------
+1. Git                 https://git-scm.com/download/win
+2. Node.js 22 LTS      https://nodejs.org   (22 ya us se naya version)
+     Check:  node -v
+3. pnpm 9.15.9
+     npm install -g pnpm@9.15.9
+     Check:  pnpm -v
+4. Services ke liye DO MEIN SE EIK raasta (Step 3 mein detail hai):
+     A) Docker Desktop  https://www.docker.com/products/docker-desktop   (aasaan)
+     B) Docker ke baghair: PostgreSQL + Redis + SeaweedFS + Mailpit alag alag
+
+
+-------------------------------------------------------------------------------
+STEP 1 - PROJECT LEIN
+-------------------------------------------------------------------------------
+  git clone <repo-ka-link> ahlan
+  cd ahlan
+
+(Ya zip file mili ho to extract karke us folder mein terminal kholein.)
+
+
+-------------------------------------------------------------------------------
+STEP 2 - PACKAGES (node_modules) INSTALL KAREIN
+-------------------------------------------------------------------------------
+  pnpm install
+
+Pehli dafa 2-5 minute lagte hain. Yeh poore project (api + mobile + shared)
+ke node_modules eik saath install karta hai. "npm install" use NA karein,
+hamesha "pnpm install".
+
+
+-------------------------------------------------------------------------------
+STEP 3 - BACKGROUND SERVICES CHALAYEIN
+-------------------------------------------------------------------------------
+
+>>> RAASTA A: DOCKER (recommended) <<<
+
+  docker compose up -d
+
+Bas. Yeh PostgreSQL (5432), Redis (6379), MinIO storage (9000, console 9001)
+aur Mailpit (8025) chala deta hai, aur photo buckets bhi khud bana deta hai.
+Check:  docker compose ps   (sab "running"/"healthy" hone chahiye)
+
+>>> RAASTA B: DOCKER KE BAGHAIR (Windows) <<<
+
+ B1. PostgreSQL 16+   https://www.postgresql.org/download/windows/
+     - Install karte waqt jo password aur port (5432 ya 5433) chunein, yaad rakhein.
+     - pgAdmin ya psql se eik database banayein:   ahlan_hse
+       psql -U postgres -p 5432 -c "create database ahlan_hse"
+
+ B2. Redis for Windows  https://github.com/redis-windows/redis-windows/releases
+     - Zip extract karein, us folder mein:
+       redis-server.exe --port 6379
+
+ B3. SeaweedFS (S3 storage)  https://github.com/seaweedfs/seaweedfs/releases
+     - windows_amd64 zip se weed.exe nikaalein, maslan C:\ahlan-tools\seaweedfs\ mein.
+     - Usi folder mein "s3.json" naam ki file banayein, andar yeh likhein:
+       {"identities":[{"name":"ahlan","credentials":[{"accessKey":"ahlan","secretKey":"ahlan-secret"}],"actions":["Admin","Read","Write","List","Tagging"]}]}
+     - "data" naam ka khaali folder banayein, phir chalayein:
+       weed.exe server -dir=C:/ahlan-tools/seaweedfs/data -s3 -s3.port=9000 -s3.config=C:/ahlan-tools/seaweedfs/s3.json -ip=127.0.0.1 -s3.ip.bind=0.0.0.0 -volume.max=100 -master.volumeSizeLimitMB=256
+
+ B4. Mailpit (optional, sirf "Forgot password" emails ke liye)
+     https://github.com/axllent/mailpit/releases
+       mailpit.exe --smtp 127.0.0.1:1025 --listen 127.0.0.1:8025
+
+ Yeh sab terminals khule rehne chahiye (ya Windows service bana lein).
+ Photo buckets Step 5 mein "storage:init" se banenge.
+
+
+-------------------------------------------------------------------------------
+STEP 4 - ENV FILES BANAYEIN
+-------------------------------------------------------------------------------
+  copy apps\api\.env.example apps\api\.env
+  copy apps\mobile\.env.example apps\mobile\.env
+
+(.env files git mein nahi jaatin, har computer par khud banani hoti hain.)
+
+A) apps\api\.env kholein:
+   - Docker (Raasta A) use kiya hai to kuch badalne ki zaroorat nahi.
+   - Raasta B (apna PostgreSQL) hai to DATABASE_URL apne password/port se badlein:
+       DATABASE_URL=postgresql://postgres:APNA_PASSWORD@localhost:5432/ahlan_hse?schema=public
+     (installer ne 5433 diya ho to 5432 ki jagah 5433 likhein)
+
+B) apps\mobile\.env kholein aur yeh line badlein (browser mein chalane ke liye):
+       EXPO_PUBLIC_API_URL=http://localhost:3000
+
+
+-------------------------------------------------------------------------------
+STEP 5 - BUILD, DATABASE AUR DEMO DATA (sirf pehli dafa)
+-------------------------------------------------------------------------------
+  pnpm --filter @ahlan/shared build        (shared code build - ZAROORI)
+  pnpm --filter api prisma:generate        (database client banata hai)
+  pnpm --filter api prisma:deploy          (database tables banata hai)
+  pnpm --filter api db:seed                (8 stadiums, users, checklists, 14 din ka data)
+  pnpm --filter api browsers:install       (PDF reports ke liye Chromium, eik dafa)
+
+Sirf Raasta B (Docker ke baghair) mein yeh bhi:
+  pnpm --filter api storage:init           (photo/report buckets banata hai)
+
+NOTE: db:seed poora database SAAF karke dobara bharta hai. Asli data ho to
+      dobara na chalayein.
+
+
+-------------------------------------------------------------------------------
+STEP 6 - PROJECT START KAREIN (roz yehi karna hai)
+-------------------------------------------------------------------------------
+Pehle services on hon (Docker: "docker compose up -d", ya Raasta B ke terminals).
+Phir DO alag terminal kholein:
+
+  Terminal 1 (API):
+    pnpm --filter api dev
+    -> "API listening on http://localhost:3000" ka intezar karein
+    -> API docs: http://localhost:3000/docs
+
+  Terminal 2 (App, browser mein):
+    pnpm --filter mobile web
+    -> Browser mein kholein: http://localhost:8081
+    -> Pehli dafa page load hone mein 1-2 minute lag sakte hain.
+
+Mail inbox (password reset emails): http://localhost:8025
+
+
+-------------------------------------------------------------------------------
+LOGIN (sab ka password:  Stadium2026! )
+-------------------------------------------------------------------------------
+  admin@ahlan.local         Admin - sab kuch dekh/edit/delete kar sakta hai
+  supervisor@ahlan.local    Supervisor - 4 stadiums (KFS, KSU, KDA, IMU), review karta hai
+  inspector1@ahlan.local    Inspector - KAS stadium
+  inspector2@ahlan.local    PAF       inspector5@ahlan.local   KSU
+  inspector3@ahlan.local    ARM       inspector6@ahlan.local   KDA
+  inspector4@ahlan.local    KFS       inspector7@ahlan.local   IMU
+                                      inspector8@ahlan.local   SHB
+  pending@ahlan.local       Approval pending (login nahi hoga - yeh test ke liye hai)
+
+
+-------------------------------------------------------------------------------
+PHONE (iPhone/Android) PAR SAFARI/CHROME SE TEST
+-------------------------------------------------------------------------------
+Expo Go se yeh app NAHI chalti (offline database native module mangta hai).
+Phone ke browser mein chalane ke liye phone aur computer eik hi WiFi par hon:
+
+1. Computer ka IP nikaalein:  ipconfig   -> "IPv4 Address" (maslan 192.168.1.20)
+2. apps\mobile\.env:   EXPO_PUBLIC_API_URL=http://192.168.1.20:3000
+3. apps\api\.env:      S3_PUBLIC_ENDPOINT=http://192.168.1.20:9000
+                       PUBLIC_APP_URL=http://192.168.1.20:8081
+4. Windows Firewall mein ports kholein (PowerShell "Run as Administrator"):
+     New-NetFirewallRule -DisplayName "Ahlan HSE dev" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8081,3000,9000 -Profile Any
+5. API aur web dono band karke dobara chalayein (Step 6).
+6. Phone ke Safari/Chrome mein:  http://192.168.1.20:8081
+
+(Raasta B mein SeaweedFS "-s3.ip.bind=0.0.0.0" ke saath chalna chahiye, jaise
+ Step 3 ki command mein hai. IP badle to 2-3 dobara karein.)
+
+
+-------------------------------------------------------------------------------
+MASLAY AUR UNKA HAL
+-------------------------------------------------------------------------------
+* "Cannot find module '@ahlan/shared'" ya shared ka error
+    -> pnpm --filter @ahlan/shared build
+       (packages/shared mein kuch badla ho to har dafa yeh dobara chalayein)
+
+* Prisma "EPERM: operation not permitted" (Windows)
+    -> API (Terminal 1) band karein, phir prisma command chalayein, phir API dobara.
+
+* "Can't reach database server" / P1001
+    -> PostgreSQL chal raha hai? DATABASE_URL ka port/password sahi hai?
+
+* "port 3000 / 8081 already in use"
+    -> Pehle wala terminal abhi chal raha hai; usay band karein (Ctrl+C).
+
+* Browser mein page khaali/safed reh jaye
+    -> 1-2 minute intezar karein (pehla bundle bara hai). Phir bhi na chale to
+       Terminal 2 band karke "pnpm --filter mobile web" dobara chalayein.
+
+* Seed ke baad login ya data ajeeb ho
+    -> App se Sign out karein ya browser ka site data clear karein
+       (purana offline data browser mein para hota hai).
+
+* "Too many requests" login par
+    -> Login eik minute mein 10 dafa tak hi hota hai, 1 minute ruk jayein.
+
+* Photo upload fail
+    -> Storage (port 9000) chal raha hai? Raasta B mein "storage:init" chalaya?
+
+* Reports "Generating" par atak jayein
+    -> Redis chal raha hai? "browsers:install" chalaya tha?
+
+
+-------------------------------------------------------------------------------
+DEVELOPERS KE LIYE - KAAM KHATAM KARNE SE PEHLE YEH CHECKS
+-------------------------------------------------------------------------------
+  pnpm lint
+  pnpm typecheck
+  pnpm test
+
+API e2e tests ke liye alag database (maslan ahlan_hse_test) bana kar:
+  set DATABASE_URL=postgresql://USER:PASS@localhost:5432/ahlan_hse_test?schema=public
+  pnpm --filter api prisma:deploy
+  pnpm --filter api test:e2e
+
+Database dekhne ke liye:   pnpm --filter api prisma:studio
+===============================================================================

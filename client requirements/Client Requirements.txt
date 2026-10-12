@@ -1,0 +1,15 @@
+Client Requirements:
+
+Usman yeh 8 stadiums ke naam hain inki images bhi tuhme bejh rahi hun Stadium ka alag section banana
+
+1	King Abdullah Sports City	(KAS)
+2	Prince Abdullah Al-Faisal Sports City	(PAF)
+3	Aramco Stadium	(ARM)
+4	King Fahd Sports City Stadium	(KFS)
+5	King Saud University Stadium	(KSU)
+6	Kingdom Arena	(KDA)
+7	Imam Mohammed Ibn Saud University Stadium	(IMU)
+8	Al Shabab Stadium	(SHB)
+
+
+CSV mein Yeh Checklist hai iske andar bhi files hain total 16 Questions honge, Is main yeh feuture add karna YES and NO evidence ke liye picture bhi aad karein yes and no dono ki condition main

@@ -1,0 +1,41 @@
+# Sign-in, and the access-request gate in front of registration.
+appId: local.ahlan.hse
+---
+- launchApp:
+    clearState: true
+
+# The app opens on sign-in when there is no stored session.
+- assertVisible: 'Sign in'
+- assertVisible: 'HSE inspection and assurance'
+
+# Registration is a request, not an account: the copy has to say so.
+- tapOn: 'Request access'
+- assertVisible: 'An HSE Administrator reviews every request before access is granted.'
+- tapOn: 'Cancel'
+
+# A wrong password is rejected without revealing whether the account exists.
+- tapOn:
+    id: 'Email'
+- inputText: 'inspector1@ahlan.local'
+- tapOn:
+    id: 'Password'
+- inputText: 'definitely-not-it'
+- tapOn: 'Sign in'
+- assertVisible: 'Email or password is incorrect.'
+
+# The seeded inspector signs in and lands on their own workspace.
+- tapOn:
+    id: 'Password'
+- eraseText
+- inputText: 'Stadium2026!'
+- tapOn: 'Sign in'
+
+- assertVisible:
+    text: 'Hello.*'
+    timeout: 15000
+- assertVisible: 'Start inspection'
+- assertVisible: 'My stadiums'
+
+# An inspector never sees the admin workspace.
+- assertNotVisible: 'Dashboard'
+- assertNotVisible: 'Access requests'
