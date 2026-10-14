@@ -14,8 +14,9 @@ const config: ExpoConfig = {
   scheme: 'ahlanhse',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
-  // Rendered from assets/brand/mark.svg - one drawing for icon, splash and
-  // the in-app LogoMark component.
+  // Rendered from the client's logo (assets/brand/logo-source.jpg) by
+  // `pnpm --filter mobile brand:render` - one source for icon, splash, favicon
+  // and the in-app LogoMark component.
   icon: './assets/brand/icon.png',
   // Arabic is a first-class locale, not an afterthought.
   extra: { supportedLocales: ['en', 'ar'] },
@@ -39,7 +40,8 @@ const config: ExpoConfig = {
     package: 'local.ahlan.hse',
     adaptiveIcon: {
       foregroundImage: './assets/brand/adaptive-icon.png',
-      backgroundColor: '#0B0C0E',
+      // The logo is drawn on white.
+      backgroundColor: '#FFFFFF',
     },
     permissions: [
       'CAMERA',

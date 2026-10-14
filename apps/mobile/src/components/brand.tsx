@@ -8,17 +8,8 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, {
-  Circle,
-  Defs,
-  G,
-  Line,
-  LinearGradient,
-  Path,
-  RadialGradient,
-  Rect,
-  Stop,
-} from 'react-native-svg';
+import { Image } from 'expo-image';
+import Svg, { Circle, Defs, G, Line, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { Text } from './text';
 import { cn } from '../utils/cn';
@@ -28,76 +19,50 @@ import { fonts } from '../theme/tokens';
 /**
  * The Ahlan brand.
  *
- * Everything here is vector and token-driven, so the mark is crisp at any
- * size, works in every theme, and costs nothing to load. The same geometry is
- * exported to the app icon and favicon (see `assets/brand/`), so the icon on
- * the home screen and the mark on the sign-in screen are one drawing.
+ * The mark is the client's logo (`assets/brand/logo.png`, rendered from
+ * `logo-source.jpg` by `pnpm --filter mobile brand:render`, which also
+ * writes the app icon, splash and favicon). The artwork is drawn on white -
+ * the ball's panels are part of it - so it always sits on a white tile, which
+ * reads the same on chalk, graphite and the hero.
  */
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro bundles static assets through require().
+const logo = require('../../assets/brand/logo.png') as number;
 
 /** SVG ids must be unique per instance and safe inside `url(#...)`. */
 function useSvgId(prefix: string): string {
   return `${prefix}${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 }
 
-/**
- * The mark: a geometric "A" - also a roof apex, the stadium - crossed by a
- * hi-vis stripe, the reflective band on a safety vest. Ahlan, the venue, and
- * the people keeping it safe, in two strokes and a bar.
- */
-export function LogoMark({
-  size = 44,
-  variant = 'color',
-}: {
-  size?: number;
-  /** `color`: graphite tile, for chalk and graphite backgrounds alike.
-   *  `onHero`: volt tile, for the graphite hero where a dark tile would vanish. */
-  variant?: 'color' | 'onHero';
-}): React.JSX.Element {
+/** The client's logo on its white tile. */
+export function LogoMark({ size = 44 }: { size?: number }): React.JSX.Element {
   const palette = usePalette();
-  const tileId = useSvgId('tile');
-  const sheenId = useSvgId('sheen');
-
-  const onHero = variant === 'onHero';
-  const ink = onHero ? palette.onPrimary : palette.onHero;
-  const stripe = onHero ? palette.onPrimary : palette.primaryFill;
-  // The gap around the stripe is drawn in the tile colour, so the band reads
-  // as laid over the letter rather than fused into it.
-  const gap = onHero ? palette.primaryFill : palette.heroTo;
-
   return (
-    <Svg width={size} height={size} viewBox="0 0 64 64" accessibilityRole="image">
-      <Defs>
-        <LinearGradient id={tileId} x1="0" y1="0" x2="1" y2="1">
-          <Stop offset="0" stopColor={onHero ? palette.primaryFill : palette.heroFrom} />
-          <Stop offset="1" stopColor={onHero ? palette.primaryFill : palette.heroTo} />
-        </LinearGradient>
-        <LinearGradient id={sheenId} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={palette.onHero} stopOpacity={onHero ? 0.35 : 0.1} />
-          <Stop offset="0.5" stopColor={palette.onHero} stopOpacity={0} />
-        </LinearGradient>
-      </Defs>
-
-      {/* Tile: a superellipse-ish rounded square, like the OS icon mask. */}
-      <Rect x="0" y="0" width="64" height="64" rx="18" fill={`url(#${tileId})`} />
-      <Rect x="0" y="0" width="64" height="64" rx="18" fill={`url(#${sheenId})`} />
-
-      {/* The A: two heavy strokes meeting at the apex. */}
-      <Path
-        d="M17 49 L32 15 L47 49"
-        fill="none"
-        stroke={ink}
-        strokeWidth={7.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* The hi-vis band, overshooting both legs. */}
-      <Line x1="13" y1="37" x2="51" y2="37" stroke={gap} strokeWidth={9} strokeLinecap="round" />
-      <Line x1="13" y1="37" x2="51" y2="37" stroke={stripe} strokeWidth={5} strokeLinecap="round" />
-    </Svg>
+    <View
+      accessibilityRole="image"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size * 0.28,
+        padding: size * 0.06,
+        // onHero is white in every theme: the logo's own background colour.
+        backgroundColor: palette.onHero,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Image source={logo} contentFit="contain" style={{ width: '100%', height: '100%' }} />
+    </View>
   );
 }
 
-/** "ahlan" in Space Grotesk, with HSE as a volt tag. */
+/**
+ * "AHLAN" in Syne ExtraBold capitals, over a volt rule and a small tracked
+ * "HSE": wide, sharp letterforms in the stadium-signage register the logo
+ * itself speaks in.
+ * Tracking is added after the last letter too, so the word is trimmed back by
+ * one step to keep it optically centred on its rule.
+ */
 export function Wordmark({
   size = 'md',
   onHero = false,
@@ -105,28 +70,36 @@ export function Wordmark({
   size?: 'sm' | 'md' | 'lg';
   onHero?: boolean;
 }): React.JSX.Element {
-  const scale = { sm: 18, md: 24, lg: 32 }[size];
+  const palette = usePalette();
+  const scale = { sm: 18, md: 24, lg: 30 }[size];
+  // Syne is already wide; it needs only a breath of tracking.
+  const tracking = scale * 0.04;
+  const tagSize = Math.max(9, Math.round(scale * 0.4));
+  // Volt reads on the graphite hero; on chalk it needs the deeper primary.
+  const accent = onHero ? palette.primaryFill : palette.primary;
   return (
-    <View className="flex-row items-center gap-2">
+    <View className="gap-1">
       <Text
         tone={onHero ? 'onHero' : 'default'}
         style={{
-          fontFamily: fonts.displayBold,
+          fontFamily: fonts.brand,
           fontSize: scale,
-          lineHeight: scale * 1.15,
-          letterSpacing: -scale * 0.045,
+          lineHeight: scale * 1.1,
+          letterSpacing: tracking,
+          marginEnd: -tracking,
         }}
       >
-        ahlan
+        AHLAN
       </Text>
-      <View className="rounded-full bg-primary-fill px-2 py-0.5">
+      <View className="flex-row items-center gap-2">
+        <View style={{ width: scale * 0.6, height: 2, borderRadius: 1, backgroundColor: accent }} />
         <Text
-          tone="onPrimary"
           style={{
-            fontFamily: fonts.displayBold,
-            fontSize: Math.round(scale * 0.4),
-            lineHeight: Math.round(scale * 0.55),
-            letterSpacing: 1,
+            color: accent,
+            fontFamily: fonts.semibold,
+            fontSize: tagSize,
+            lineHeight: tagSize * 1.2,
+            letterSpacing: tagSize * 0.3,
           }}
         >
           HSE

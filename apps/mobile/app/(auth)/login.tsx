@@ -87,7 +87,7 @@ export default function LoginScreen(): React.JSX.Element {
           <View className="w-full max-w-[440px] gap-6 self-center px-gutter">
             <FadeAppear>
               <View className="flex-row items-center gap-3">
-                <LogoMark size={52} variant="onHero" />
+                <LogoMark size={64} />
                 <Wordmark size="lg" onHero />
               </View>
             </FadeAppear>

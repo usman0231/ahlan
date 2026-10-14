@@ -1,4 +1,5 @@
 import type { ReportData } from '../report-data.service';
+import { LOGO_DATA_URI } from './logo.generated';
 
 /**
  * The report PDF, as a self-contained HTML document.
@@ -135,7 +136,7 @@ function coverPage(data: ReportData, t: Labels): string {
   return `
 <section class="page cover">
   <div class="cover-top">
-    <div class="brand">Ahlan HSE</div>
+    <div class="brand"><img class="brand-logo" src="${LOGO_DATA_URI}" alt="">Ahlan HSE</div>
     <div class="confidential">${esc(t.confidential)}</div>
   </div>
   <h1>${esc(data.meta.title)}</h1>
@@ -452,8 +453,9 @@ function css(rtl: boolean): string {
   h3 { font-size: 12pt; margin: 14pt 0 6pt; }
 
   .cover { padding-top: 40pt; }
-  .cover-top { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 8pt; }
-  .brand { font-weight: 700; font-size: 13pt; color: var(--accent); letter-spacing: 0.5pt; }
+  .cover-top { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 8pt; }
+  .brand { display: flex; align-items: center; gap: 8pt; font-weight: 700; font-size: 13pt; color: var(--accent); letter-spacing: 0.5pt; }
+  .brand-logo { height: 28pt; width: auto; }
   .confidential { font-size: 8.5pt; color: var(--muted); text-transform: uppercase; letter-spacing: 1pt; }
   .cover-meta { display: grid; grid-template-columns: max-content 1fr; gap: 4pt 16pt; margin: 20pt 0 28pt; }
   .cover-meta dt { color: var(--muted); font-size: 9.5pt; }

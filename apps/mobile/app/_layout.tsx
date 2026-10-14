@@ -64,8 +64,9 @@ const queryClient = new QueryClient({
 
 export default function RootLayout(): React.JSX.Element | null {
   const [ready, setReady] = useState(false);
-  // Inter for reading, Space Grotesk for display; nothing renders until both
-  // are in, so the first frame is never a system-font flash.
+  // Inter for reading, Space Grotesk for display, Syne for the wordmark;
+  // nothing renders until all are in, so the first frame is never a
+  // system-font flash.
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -75,6 +76,10 @@ export default function RootLayout(): React.JSX.Element | null {
     SpaceGrotesk_500Medium,
     SpaceGrotesk_600SemiBold,
     SpaceGrotesk_700Bold,
+    // Bundled rather than an @expo-google-fonts package: one weight, used
+    // only by the wordmark (assets/fonts/Syne-OFL.txt).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro bundles static assets through require().
+    Syne_800ExtraBold: require('../assets/fonts/Syne_800ExtraBold.ttf'),
   });
   const restore = useAuthStore((state) => state.restore);
   const settingsHydrated = useSettingsStore((state) => state.hydrated);

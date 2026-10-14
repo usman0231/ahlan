@@ -192,9 +192,9 @@ export const radius = {
 } as const;
 
 /**
- * Two families, one file per weight.
+ * Two families, one file per weight, plus Syne for the wordmark alone.
  *
- * Space Grotesk carries the display roles (titles, figures, the wordmark):
+ * Space Grotesk carries the display roles (titles, figures):
  * its squared, technical forms are most of what makes the Volt look read as
  * an instrument rather than a form. Inter carries everything you read.
  *
@@ -212,6 +212,8 @@ export const fonts = {
   displayMedium: 'SpaceGrotesk_500Medium',
   displaySemibold: 'SpaceGrotesk_600SemiBold',
   displayBold: 'SpaceGrotesk_700Bold',
+  /** The "AHLAN" wordmark only: wide, sharp capitals with a signage feel. */
+  brand: 'Syne_800ExtraBold',
 } as const;
 
 export const typography = {
