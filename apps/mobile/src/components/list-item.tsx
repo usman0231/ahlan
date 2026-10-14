@@ -18,6 +18,7 @@ export function ListItem({
   meta,
   leading,
   trailing,
+  action,
   onPress,
   disabled,
   className,
@@ -31,6 +32,12 @@ export function ListItem({
   meta?: string;
   leading?: React.ReactNode;
   trailing?: React.ReactNode;
+  /**
+   * A control of its own (delete, menu) at the end of the row. Kept outside
+   * the row's pressable, never in `trailing`: a button inside a button is
+   * invalid on web and steals presses on native.
+   */
+  action?: React.ReactNode;
   onPress?: () => void;
   disabled?: boolean;
   className?: string;
@@ -57,28 +64,39 @@ export function ListItem({
     </View>
   );
 
-  const row = !onPress ? (
-    <View
-      className={cn('rounded-lg border border-card-border bg-surface p-4', className)}
-      style={elevation.card}
-    >
-      {content}
-    </View>
-  ) : (
+  const card = 'rounded-lg border border-card-border bg-surface';
+  const pressable = (padding: string) => (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
       disabled={disabled}
       onPress={onPress}
-      className={cn(
-        'rounded-lg border border-card-border bg-surface p-4 active:bg-surface-sunken',
-        disabled && 'opacity-50',
-        className,
-      )}
+      className={cn(card, padding, 'active:bg-surface-sunken', disabled && 'opacity-50', className)}
       style={elevation.card}
     >
       {content}
     </Pressable>
+  );
+
+  // With an action the row keeps room at its end, and the action sits over
+  // that padding as a sibling of the pressable rather than inside it.
+  const padding = action ? 'py-4 ps-4 pe-16' : 'p-4';
+  const body = onPress ? (
+    pressable(padding)
+  ) : (
+    <View className={cn(card, padding, className)} style={elevation.card}>
+      {content}
+    </View>
+  );
+  const row = action ? (
+    <View>
+      {body}
+      <View pointerEvents="box-none" className="absolute bottom-0 end-0 top-0 justify-center pe-2">
+        {action}
+      </View>
+    </View>
+  ) : (
+    body
   );
 
   // Only the first screenful animates: replaying an entrance on every row
@@ -87,13 +105,7 @@ export function ListItem({
 }
 
 /** Initials avatar. No photo upload for users, so initials are the identity. */
-export function Avatar({
-  name,
-  size = 40,
-}: {
-  name: string;
-  size?: number;
-}): React.JSX.Element {
+export function Avatar({ name, size = 40 }: { name: string; size?: number }): React.JSX.Element {
   return (
     <View
       accessibilityElementsHidden

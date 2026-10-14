@@ -234,23 +234,25 @@ export default function ReportsScreen(): React.JSX.Element {
                     {report.includeAiInsights ? (
                       <Badge label={t('admin.aiGenerated')} tone="primary" />
                     ) : null}
-                    {admin && report.status !== 'RUNNING' ? (
-                      <IconButton
-                        icon={<Trash2 size={18} color={palette.danger} />}
-                        accessibilityLabel={t('admin.reportDelete.action')}
-                        onPress={() =>
-                          reason.open({
-                            title: t('admin.reportDelete.title'),
-                            message: t('admin.reportDelete.body'),
-                            confirmLabel: t('common.delete'),
-                            destructive: true,
-                            onConfirm: (text) =>
-                              removeReport.mutateAsync({ id: report.id, reason: text }),
-                          })
-                        }
-                      />
-                    ) : null}
                   </View>
+                }
+                action={
+                  admin && report.status !== 'RUNNING' ? (
+                    <IconButton
+                      icon={<Trash2 size={18} color={palette.danger} />}
+                      accessibilityLabel={t('admin.reportDelete.action')}
+                      onPress={() =>
+                        reason.open({
+                          title: t('admin.reportDelete.title'),
+                          message: t('admin.reportDelete.body'),
+                          confirmLabel: t('common.delete'),
+                          destructive: true,
+                          onConfirm: (text) =>
+                            removeReport.mutateAsync({ id: report.id, reason: text }),
+                        })
+                      }
+                    />
+                  ) : undefined
                 }
                 onPress={report.status === 'COMPLETED' ? () => void download(report.id) : undefined}
               />
